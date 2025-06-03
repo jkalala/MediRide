@@ -2,32 +2,30 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
 } from 'react-native';
-import { auth, db } from '../../services/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../../navigation/types';
+import { MaterialIcons } from '@expo/vector-icons';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { auth } from '../../services/firebase';
+import { useNavigation } from '@react-navigation/native';
 
-type RegisterScreenProps = {
-  navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
-};
-
-export default function RegisterScreen({ navigation }: RegisterScreenProps) {
+export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const navigation = useNavigation();
 
   const handleRegister = async () => {
-    if (!name || !email || !password || !confirmPassword || !phone) {
+    if (!name || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -37,138 +35,199 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       return;
     }
 
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
+
     try {
       setLoading(true);
       const { user } = await createUserWithEmailAndPassword(auth, email, password);
       
-      // Create user profile in Firestore
-      await setDoc(doc(db, 'users', user.uid), {
-        name,
-        email,
-        phone,
-        createdAt: new Date().toISOString(),
-        role: 'patient',
+      // Update user profile with display name
+      await updateProfile(user, {
+        displayName: name,
       });
 
-      Alert.alert('Success', 'Account created successfully');
+      // Navigation will be handled by the auth state change listener
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      console.error('Error registering:', error);
+      let message = 'Failed to create account. Please try again.';
+      
+      if (error.code === 'auth/email-already-in-use') {
+        message = 'This email is already registered.';
+      } else if (error.code === 'auth/invalid-email') {
+        message = 'Invalid email address.';
+      } else if (error.code === 'auth/weak-password') {
+        message = 'Password is too weak.';
+      }
+      
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Join MediRide today</Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <MaterialIcons name="local-hospital" size={64} color="#FF4B4B" />
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.subtitle}>Join MediRide today</Text>
+        </View>
 
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="Full Name"
-          value={name}
-          onChangeText={setName}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Phone Number"
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm Password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry
-        />
+        <View style={styles.form}>
+          <View style={styles.inputContainer}>
+            <MaterialIcons name="person" size={24} color="#666666" />
+            <TextInput
+              style={styles.input}
+              placeholder="Full Name"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              autoComplete="name"
+            />
+          </View>
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleRegister}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Creating Account...' : 'Register'}
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.inputContainer}>
+            <MaterialIcons name="email" size={24} color="#666666" />
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+            />
+          </View>
 
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Login')}
-          style={styles.link}
-        >
-          <Text style={styles.linkText}>Already have an account? Login</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          <View style={styles.inputContainer}>
+            <MaterialIcons name="lock" size={24} color="#666666" />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="password-new"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <MaterialIcons name="lock" size={24} color="#666666" />
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              autoComplete="password-new"
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.registerButton, loading && styles.registerButtonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.registerButtonText}>Create Account</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Already have an account? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Login' as never)}>
+            <Text style={styles.footerLink}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollContent: {
     flexGrow: 1,
-    padding: 20,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
+    padding: 24,
+  },
+  header: {
+    alignItems: 'center',
+    marginTop: 48,
+    marginBottom: 48,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#FF4B4B',
-    marginBottom: 10,
+    color: '#333333',
+    marginTop: 16,
   },
   subtitle: {
-    fontSize: 18,
-    textAlign: 'center',
-    color: '#666',
-    marginBottom: 40,
+    fontSize: 16,
+    color: '#666666',
+    marginTop: 8,
   },
   form: {
-    width: '100%',
+    marginBottom: 24,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
   input: {
-    backgroundColor: '#f5f5f5',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
+    flex: 1,
+    height: 56,
+    marginLeft: 12,
     fontSize: 16,
+    color: '#333333',
   },
-  button: {
+  registerButton: {
     backgroundColor: '#FF4B4B',
-    padding: 15,
-    borderRadius: 10,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
+  registerButtonDisabled: {
+    opacity: 0.7,
+  },
+  registerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: 'bold',
   },
-  link: {
-    marginTop: 15,
-    alignItems: 'center',
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 'auto',
+    paddingVertical: 24,
   },
-  linkText: {
+  footerText: {
+    color: '#666666',
+    fontSize: 14,
+  },
+  footerLink: {
     color: '#FF4B4B',
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 }); 

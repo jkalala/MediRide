@@ -2,23 +2,23 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { auth } from '../../services/firebase';
+import { MaterialIcons } from '@expo/vector-icons';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../../navigation/types';
+import { auth } from '../../services/firebase';
+import { useNavigation } from '@react-navigation/native';
 
-type ForgotPasswordScreenProps = {
-  navigation: NativeStackNavigationProp<AuthStackParamList, 'ForgotPassword'>;
-};
-
-export default function ForgotPasswordScreen({ navigation }: ForgotPasswordScreenProps) {
+export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const navigation = useNavigation();
 
   const handleResetPassword = async () => {
     if (!email) {
@@ -29,105 +29,147 @@ export default function ForgotPasswordScreen({ navigation }: ForgotPasswordScree
     try {
       setLoading(true);
       await sendPasswordResetEmail(auth, email);
+      
       Alert.alert(
-        'Success',
-        'Password reset email sent. Please check your inbox.',
-        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        'Password Reset',
+        'A password reset link has been sent to your email address.',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]
       );
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      console.error('Error sending password reset:', error);
+      let message = 'Failed to send password reset email. Please try again.';
+      
+      if (error.code === 'auth/invalid-email') {
+        message = 'Invalid email address.';
+      } else if (error.code === 'auth/user-not-found') {
+        message = 'No account found with this email address.';
+      }
+      
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Reset Password</Text>
-      <Text style={styles.subtitle}>
-        Enter your email address and we'll send you a link to reset your password
-      </Text>
-
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View style={styles.content}>
         <TouchableOpacity
-          style={styles.button}
-          onPress={handleResetPassword}
-          disabled={loading}
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
         >
-          <Text style={styles.buttonText}>
-            {loading ? 'Sending...' : 'Reset Password'}
+          <MaterialIcons name="arrow-back" size={24} color="#333333" />
+        </TouchableOpacity>
+
+        <View style={styles.header}>
+          <MaterialIcons name="lock-reset" size={64} color="#FF4B4B" />
+          <Text style={styles.title}>Reset Password</Text>
+          <Text style={styles.subtitle}>
+            Enter your email address and we'll send you a link to reset your password
           </Text>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Login')}
-          style={styles.link}
-        >
-          <Text style={styles.linkText}>Back to Login</Text>
-        </TouchableOpacity>
+        <View style={styles.form}>
+          <View style={styles.inputContainer}>
+            <MaterialIcons name="email" size={24} color="#666666" />
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.resetButton, loading && styles.resetButtonDisabled]}
+            onPress={handleResetPassword}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.resetButtonText}>Send Reset Link</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  content: {
+    flex: 1,
+    padding: 24,
+  },
+  backButton: {
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  header: {
+    alignItems: 'center',
+    marginTop: 32,
+    marginBottom: 48,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    textAlign: 'center',
-    color: '#FF4B4B',
-    marginBottom: 10,
+    color: '#333333',
+    marginTop: 16,
   },
   subtitle: {
     fontSize: 16,
+    color: '#666666',
+    marginTop: 8,
     textAlign: 'center',
-    color: '#666',
-    marginBottom: 40,
-    paddingHorizontal: 20,
+    lineHeight: 24,
   },
   form: {
-    width: '100%',
+    marginBottom: 24,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    marginBottom: 24,
   },
   input: {
-    backgroundColor: '#f5f5f5',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
+    flex: 1,
+    height: 56,
+    marginLeft: 12,
     fontSize: 16,
+    color: '#333333',
   },
-  button: {
+  resetButton: {
     backgroundColor: '#FF4B4B',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  link: {
-    marginTop: 15,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  linkText: {
-    color: '#FF4B4B',
+  resetButtonDisabled: {
+    opacity: 0.7,
+  },
+  resetButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: 'bold',
   },
 }); 

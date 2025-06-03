@@ -1,13 +1,25 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { MainTabParamList } from './types';
+import { createStackNavigator } from '@react-navigation/stack';
+import { MainTabParamList, EmergencyStackParamList } from './types';
 import HomeScreen from '../screens/main/HomeScreen';
 import EmergencyScreen from '../screens/main/EmergencyScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
+import EmergencyContactsScreen from '../screens/emergency/EmergencyContactsScreen';
+import AddContactScreen from '../screens/emergency/AddContactScreen';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const Tab = createBottomTabNavigator();
+const EmergencyStack = createStackNavigator();
+
+const EmergencyStackNavigator = () => (
+  <EmergencyStack.Navigator screenOptions={{ headerShown: false }}>
+    <EmergencyStack.Screen name="EmergencyMain" component={EmergencyScreen} />
+    <EmergencyStack.Screen name="EmergencyContacts" component={EmergencyContactsScreen} />
+    <EmergencyStack.Screen name="AddContact" component={AddContactScreen} />
+  </EmergencyStack.Navigator>
+);
 
 export default function MainNavigator() {
   return (
@@ -40,7 +52,7 @@ export default function MainNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Emergency" component={EmergencyScreen} />
+      <Tab.Screen name="Emergency" component={EmergencyStackNavigator} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>

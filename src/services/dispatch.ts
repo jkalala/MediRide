@@ -1,6 +1,6 @@
-import { Platform } from 'react-native';
-import * as Linking from 'expo-linking';
-import { makePhoneCall } from 'react-native-phone-call';
+import { ref, push, set, get } from 'firebase/database';
+import { database } from './firebase';
+import { EmergencyContact } from './contacts';
 
 export type DispatchChannel = 'APP' | 'USSD' | 'VOICE';
 
@@ -8,82 +8,135 @@ export interface DispatchRequest {
   location: {
     latitude: number;
     longitude: number;
-    address?: string;
+    accuracy?: number;
+    timestamp: number;
   };
-  emergencyType: string;
-  description?: string;
-  contactNumber: string;
-  channel: DispatchChannel;
+  timestamp: number;
+  primaryContact: EmergencyContact | null;
+  status?: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  ambulanceId?: string;
+  estimatedArrivalTime?: number;
+  emergencyType?: string;
+  contactNumber?: string;
+  channel?: DispatchChannel;
 }
 
 class DispatchService {
-  private readonly USSD_CODE = '*123#'; // Replace with your actual USSD code
-  private readonly EMERGENCY_NUMBER = '911'; // Replace with your actual emergency number
+  private readonly DISPATCH_PATH = 'dispatches';
 
   async dispatch(request: DispatchRequest): Promise<boolean> {
     try {
-      switch (request.channel) {
-        case 'APP':
-          return await this.dispatchViaApp(request);
-        case 'USSD':
-          return await this.dispatchViaUSSD(request);
-        case 'VOICE':
-          return await this.dispatchViaVoice(request);
-        default:
-          throw new Error('Invalid dispatch channel');
-      }
-    } catch (error) {
-      console.error('Dispatch error:', error);
-      return false;
-    }
-  }
-
-  private async dispatchViaApp(request: DispatchRequest): Promise<boolean> {
-    // Implement your app-based dispatch logic here
-    // This could involve sending data to your backend
-    try {
-      const response = await fetch('YOUR_API_ENDPOINT', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-      return response.ok;
-    } catch (error) {
-      console.error('App dispatch error:', error);
-      return false;
-    }
-  }
-
-  private async dispatchViaUSSD(request: DispatchRequest): Promise<boolean> {
-    try {
-      const ussdUrl = `tel:${this.USSD_CODE}`;
-      const canOpen = await Linking.canOpenURL(ussdUrl);
-      
-      if (canOpen) {
-        await Linking.openURL(ussdUrl);
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('USSD dispatch error:', error);
-      return false;
-    }
-  }
-
-  private async dispatchViaVoice(request: DispatchRequest): Promise<boolean> {
-    try {
-      const args = {
-        number: this.EMERGENCY_NUMBER,
-        prompt: true,
-      };
-      
-      await makePhoneCall(args);
+      await this.sendDispatchRequest(request);
       return true;
     } catch (error) {
-      console.error('Voice dispatch error:', error);
+      console.error('Error dispatching:', error);
       return false;
+    }
+  }
+
+  async sendDispatchRequest(request: DispatchRequest): Promise<string> {
+    try {
+      const dispatchRef = ref(database, this.DISPATCH_PATH);
+      const newDispatchRef = push(dispatchRef);
+      
+      const dispatchData = {
+        ...request,
+        status: 'pending',
+        createdAt: Date.now(),
+      };
+
+      await set(newDispatchRef, dispatchData);
+      return newDispatchRef.key || '';
+    } catch (error) {
+      console.error('Error sending dispatch request:', error);
+      throw error;
+    }
+  }
+
+  async getDispatchStatus(dispatchId: string): Promise<DispatchRequest | null> {
+    try {
+      const dispatchRef = ref(database, `${this.DISPATCH_PATH}/${dispatchId}`);
+      const snapshot = await get(dispatchRef);
+      
+      if (!snapshot.exists()) {
+        return null;
+      }
+
+      return snapshot.val();
+    } catch (error) {
+      console.error('Error getting dispatch status:', error);
+      throw error;
+    }
+  }
+
+  async updateDispatchStatus(
+    dispatchId: string,
+    status: DispatchRequest['status'],
+    updates: Partial<DispatchRequest> = {}
+  ): Promise<void> {
+    try {
+      const dispatchRef = ref(database, `${this.DISPATCH_PATH}/${dispatchId}`);
+      const snapshot = await get(dispatchRef);
+      
+      if (!snapshot.exists()) {
+        throw new Error('Dispatch not found');
+      }
+
+      const currentData = snapshot.val();
+      const updatedData = {
+        ...currentData,
+        ...updates,
+        status,
+        updatedAt: Date.now(),
+      };
+
+      await set(dispatchRef, updatedData);
+    } catch (error) {
+      console.error('Error updating dispatch status:', error);
+      throw error;
+    }
+  }
+
+  async cancelDispatch(dispatchId: string): Promise<void> {
+    try {
+      await this.updateDispatchStatus(dispatchId, 'cancelled');
+    } catch (error) {
+      console.error('Error cancelling dispatch:', error);
+      throw error;
+    }
+  }
+
+  async assignAmbulance(
+    dispatchId: string,
+    ambulanceId: string,
+    estimatedArrivalTime: number
+  ): Promise<void> {
+    try {
+      await this.updateDispatchStatus(dispatchId, 'accepted', {
+        ambulanceId,
+        estimatedArrivalTime,
+      });
+    } catch (error) {
+      console.error('Error assigning ambulance:', error);
+      throw error;
+    }
+  }
+
+  async startTransport(dispatchId: string): Promise<void> {
+    try {
+      await this.updateDispatchStatus(dispatchId, 'in_progress');
+    } catch (error) {
+      console.error('Error starting transport:', error);
+      throw error;
+    }
+  }
+
+  async completeDispatch(dispatchId: string): Promise<void> {
+    try {
+      await this.updateDispatchStatus(dispatchId, 'completed');
+    } catch (error) {
+      console.error('Error completing dispatch:', error);
+      throw error;
     }
   }
 }

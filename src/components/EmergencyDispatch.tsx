@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import { Button, Text, Card } from 'react-native-paper';
-import { dispatchService, DispatchChannel } from '../services/dispatch';
+import { dispatchService, DispatchChannel, DispatchRequest } from '../services/dispatch';
 import * as Location from 'expo-location';
 
 interface EmergencyDispatchProps {
@@ -28,11 +28,14 @@ export default function EmergencyDispatch({ onDispatchComplete }: EmergencyDispa
         location: {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
+          timestamp: Date.now(),
         },
+        timestamp: Date.now(),
+        primaryContact: null,
         emergencyType: 'Medical Emergency',
         contactNumber: '1234567890', // Replace with actual user's contact
         channel,
-      };
+      } as DispatchRequest;
 
       const success = await dispatchService.dispatch(request);
       

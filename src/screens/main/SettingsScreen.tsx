@@ -8,68 +8,42 @@ import {
   Switch,
   Alert,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { MainTabParamList } from '../../navigation/types';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../hooks/useAuth';
+import { signOut } from 'firebase/auth';
+import { auth } from '../../services/firebase';
 
-type SettingsScreenProps = {
-  navigation: NativeStackNavigationProp<MainTabParamList, 'Settings'>;
-};
-
-export default function SettingsScreen({ navigation }: SettingsScreenProps) {
-  const [notifications, setNotifications] = useState(true);
-  const [locationServices, setLocationServices] = useState(true);
+export default function SettingsScreen() {
+  const navigation = useNavigation();
+  const { user } = useAuth();
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [locationEnabled, setLocationEnabled] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
 
-  const settingsSections = [
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const menuItems = [
     {
-      title: 'Preferences',
-      items: [
-        {
-          title: 'Notifications',
-          icon: 'bell',
-          type: 'switch',
-          value: notifications,
-          onValueChange: setNotifications,
-        },
-        {
-          title: 'Location Services',
-          icon: 'map-marker',
-          type: 'switch',
-          value: locationServices,
-          onValueChange: setLocationServices,
-        },
-        {
-          title: 'Dark Mode',
-          icon: 'theme-light-dark',
-          type: 'switch',
-          value: darkMode,
-          onValueChange: setDarkMode,
-        },
-      ],
+      title: 'About',
+      icon: 'info',
+      screen: 'About',
     },
     {
-      title: 'Account',
-      items: [
-        {
-          title: 'Privacy Policy',
-          icon: 'shield-account',
-          type: 'link',
-          onPress: () => Alert.alert('Coming Soon', 'This feature will be available soon.'),
-        },
-        {
-          title: 'Terms of Service',
-          icon: 'file-document',
-          type: 'link',
-          onPress: () => Alert.alert('Coming Soon', 'This feature will be available soon.'),
-        },
-        {
-          title: 'Help & Support',
-          icon: 'help-circle',
-          type: 'link',
-          onPress: () => Alert.alert('Coming Soon', 'This feature will be available soon.'),
-        },
-      ],
+      title: 'Privacy Policy',
+      icon: 'privacy-tip',
+      screen: 'Privacy',
+    },
+    {
+      title: 'Terms of Service',
+      icon: 'description',
+      screen: 'Terms',
     },
   ];
 
@@ -80,43 +54,81 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
         <Text style={styles.subtitle}>Customize your app experience</Text>
       </View>
 
-      {settingsSections.map((section, sectionIndex) => (
-        <View key={sectionIndex} style={styles.section}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-          {section.items.map((item, itemIndex) => (
-            <View key={itemIndex} style={styles.settingItem}>
-              <View style={styles.settingInfo}>
-                <MaterialCommunityIcons
-                  name={item.icon as any}
-                  size={24}
-                  color="#FF4B4B"
-                />
-                <Text style={styles.settingText}>{item.title}</Text>
-              </View>
-              {item.type === 'switch' ? (
-                <Switch
-                  value={item.value}
-                  onValueChange={item.onValueChange}
-                  trackColor={{ false: '#767577', true: '#FF4B4B' }}
-                  thumbColor={item.value ? '#fff' : '#f4f3f4'}
-                />
-              ) : (
-                <TouchableOpacity onPress={item.onPress}>
-                  <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={24}
-                    color="#666"
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-          ))}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Preferences</Text>
+        
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <MaterialIcons name="notifications" size={24} color="#666666" />
+            <Text style={styles.settingText}>Push Notifications</Text>
+          </View>
+          <Switch
+            value={notificationsEnabled}
+            onValueChange={setNotificationsEnabled}
+            trackColor={{ false: '#767577', true: '#FF4B4B' }}
+            thumbColor={notificationsEnabled ? '#FFFFFF' : '#f4f3f4'}
+          />
         </View>
-      ))}
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <MaterialIcons name="location-on" size={24} color="#666666" />
+            <Text style={styles.settingText}>Location Services</Text>
+          </View>
+          <Switch
+            value={locationEnabled}
+            onValueChange={setLocationEnabled}
+            trackColor={{ false: '#767577', true: '#FF4B4B' }}
+            thumbColor={locationEnabled ? '#FFFFFF' : '#f4f3f4'}
+          />
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingLeft}>
+            <MaterialIcons name="dark-mode" size={24} color="#666666" />
+            <Text style={styles.settingText}>Dark Mode</Text>
+          </View>
+          <Switch
+            value={darkMode}
+            onValueChange={setDarkMode}
+            trackColor={{ false: '#767577', true: '#FF4B4B' }}
+            thumbColor={darkMode ? '#FFFFFF' : '#f4f3f4'}
+          />
+        </View>
+      </View>
 
       <View style={styles.section}>
-        <Text style={styles.version}>Version 1.0.0</Text>
+        <Text style={styles.sectionTitle}>Information</Text>
+        {menuItems.map((item, index) => (
+          <TouchableOpacity
+            key={index}
+            style={styles.menuItem}
+            onPress={() => navigation.navigate(item.screen as never)}
+          >
+            <View style={styles.menuItemLeft}>
+              <MaterialIcons name={item.icon as any} size={24} color="#666666" />
+              <Text style={styles.menuItemText}>{item.title}</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={24} color="#666666" />
+          </TouchableOpacity>
+        ))}
       </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Account</Text>
+        <View style={styles.accountInfo}>
+          <MaterialIcons name="email" size={24} color="#666666" />
+          <Text style={styles.accountText}>{user?.email}</Text>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={handleSignOut}
+      >
+        <MaterialIcons name="logout" size={24} color="#FF4B4B" />
+        <Text style={styles.logoutText}>Log Out</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -124,53 +136,91 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
   },
   header: {
-    padding: 20,
+    padding: 24,
     backgroundColor: '#FF4B4B',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
+    color: '#FFFFFF',
   },
   subtitle: {
     fontSize: 16,
-    color: '#fff',
+    color: '#FFFFFF',
     opacity: 0.8,
+    marginTop: 4,
   },
   section: {
-    padding: 20,
+    padding: 24,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
+    color: '#333333',
+    marginBottom: 16,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f5f5f5',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
   },
-  settingInfo: {
+  settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   settingText: {
     fontSize: 16,
-    color: '#333',
-    marginLeft: 15,
+    color: '#333333',
+    marginLeft: 16,
   },
-  version: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 14,
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#333333',
+    marginLeft: 16,
+  },
+  accountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 16,
+  },
+  accountText: {
+    fontSize: 16,
+    color: '#333333',
+    marginLeft: 16,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 24,
+    padding: 16,
+    backgroundColor: '#FFF5F5',
+    borderRadius: 12,
+  },
+  logoutText: {
+    color: '#FF4B4B',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 12,
   },
 }); 
