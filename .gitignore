@@ -128,3 +128,4 @@ coverage/
 # IDE
 .vscode/
 .idea/
+functions/.runtimeconfig.json
