@@ -1,0 +1,75 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ "main", "staging" ]
+  pull_request:
+    branches: [ "main", "staging" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Use Node.js 18
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: mediride-app/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd mediride-app
+          npm ci
+      
+      - name: Run tests with coverage
+        run: |
+          cd mediride-app
+          npm run test:ci
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          directory: mediride-app/coverage
+          fail_ci_if_error: true
+      
+      - name: Build
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+        run: |
+          cd mediride-app
+          npm run build
+      
+      - name: Version bump
+        if: github.ref == 'refs/heads/main'
+        uses: phips28/gh-action-bump-version@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          minor-wording: 'feat,feature'
+          major-wording: 'BREAKING,major'
+          patch-wording: 'fix,patch'
+          minor-title: '🚀 Features'
+          major-title: '💥 Breaking Changes'
+          patch-title: '🐛 Fixes'
+      
+      - name: Deploy to Staging
+        if: github.ref == 'refs/heads/staging'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          channelId: staging
+          projectId: mediride-app-staging
+      
+      - name: Deploy to Production
+        if: github.ref == 'refs/heads/main'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          channelId: live
+          projectId: mediride-app 
