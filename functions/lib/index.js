@@ -29,76 +29,63 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.api = exports.calculateRoute = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+// import { Twilio } from 'twilio';
 const geofire = __importStar(require("geofire-common"));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
-const africastalking_1 = __importDefault(require("africastalking"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 admin.initializeApp();
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({ origin: true }));
 // Get configuration
 const config = functions.config();
-const africastalkingConfig = config.africastalking || {};
+// const africastalkingConfig = config.africastalking || {};
 const appConfig = config.app || {};
 // Initialize Africa's Talking if config is available
-const africastalking = africastalkingConfig.api_key && africastalkingConfig.username
-    ? (0, africastalking_1.default)({
-        apiKey: africastalkingConfig.api_key,
-        username: africastalkingConfig.username
-    })
-    : null;
+// const africastalking = africastalkingConfig.api_key && africastalkingConfig.username
+//   ? AfricasTalking({
+//       apiKey: africastalkingConfig.api_key,
+//       username: africastalkingConfig.username
+//     })
+//   : null;
+const db = admin.firestore();
 // USSD Callback Handler
 app.post('/ussd', async (req, res) => {
-    const { sessionId, phoneNumber, text } = req.body;
+    const { phoneNumber, text } = req.body;
     try {
         if (text === '1') {
             // Emergency request
             const emergency = {
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                phoneNumber,
+                location: {
+                    latitude: 0,
+                    longitude: 0,
+                    timestamp: Date.now(),
+                },
                 status: 'pending',
-                ussdSession: sessionId,
-                patient: {
-                    phoneNumber: phoneNumber
-                }
+                createdAt: Date.now(),
             };
-            await admin.firestore()
-                .collection('emergencies')
-                .add(emergency);
-            res.send(`CON Please describe the emergency:
-1. Bleeding
-2. Labor
-3. Accident
-4. Other`);
+            await db.collection('emergencies').add(emergency);
+            res.send(`CON Please enter your location:\n1. Share current location\n2. Enter manually`);
         }
-        else if (text.startsWith('1*')) {
-            // Handle emergency type selection
-            const emergencyType = text.split('*')[1];
-            const emergencyRef = admin.firestore()
-                .collection('emergencies')
-                .where('ussdSession', '==', sessionId)
-                .limit(1);
-            const snapshot = await emergencyRef.get();
-            if (!snapshot.empty) {
-                await snapshot.docs[0].ref.update({
-                    'patient.condition': emergencyType,
-                    status: 'dispatched'
+        else if (text.startsWith('1.')) {
+            // Handle location sharing
+            const location = parseLocation(text);
+            if (location) {
+                await db.collection('emergencies').add({
+                    phoneNumber,
+                    location,
+                    status: 'pending',
+                    createdAt: Date.now(),
                 });
-                // Send SMS notification using Africa's Talking if available
-                if (africastalking) {
-                    try {
-                        await africastalking.SMS.send({
-                            to: phoneNumber,
-                            message: 'Emergency request received. Help is on the way.'
-                        });
-                    }
-                    catch (error) {
-                        console.error('SMS Error:', error);
-                        // Continue execution even if SMS fails
-                    }
-                }
+                res.send('END Emergency services have been notified. Help is on the way.');
             }
-            res.send('END Emergency request received. Help is on the way.');
+            else {
+                res.send('END Invalid location format. Please try again.');
+            }
+        }
+        else {
+            res.send(`CON Welcome to MediRide Emergency Services\n1. Request Emergency`);
         }
     }
     catch (error) {
@@ -109,7 +96,9 @@ app.post('/ussd', async (req, res) => {
 // Calculate Route Function (v2 syntax)
 exports.calculateRoute = (0, firestore_1.onDocumentCreated)('emergencies/{emergencyId}', async (event) => {
     const snap = event.data;
-    const emergency = snap === null || snap === void 0 ? void 0 : snap.data();
+    if (!snap)
+        return null;
+    const emergency = snap.data();
     const emergencyId = event.params.emergencyId;
     if (!(emergency === null || emergency === void 0 ? void 0 : emergency.location))
         return null;
@@ -119,18 +108,18 @@ exports.calculateRoute = (0, firestore_1.onDocumentCreated)('emergencies/{emerge
     const bounds = geofire.geohashQueryBounds(center, radiusInKm * 1000);
     const matchingDrivers = [];
     for (const b of bounds) {
-        const query = admin.firestore()
+        const query = db
             .collection('drivers')
             .where('isActive', '==', true)
-            .orderBy('lastKnownLocation')
-            .startAt(b[0])
-            .endAt(b[1]);
+            .where('location.geohash', '>=', b[0])
+            .where('location.geohash', '<=', b[1])
+            .orderBy('location.geohash');
         const snapshot = await query.get();
         for (const doc of snapshot.docs) {
             const driver = doc.data();
-            const distanceInKm = geofire.distanceBetween([driver.lastKnownLocation.latitude, driver.lastKnownLocation.longitude], center);
+            const distanceInKm = geofire.distanceBetween([driver.location.latitude, driver.location.longitude], center);
             if (distanceInKm <= radiusInKm) {
-                matchingDrivers.push(Object.assign(Object.assign({ id: doc.id }, driver), { distance: distanceInKm }));
+                matchingDrivers.push(Object.assign(Object.assign({}, driver), { distance: distanceInKm }));
             }
         }
     }
@@ -140,25 +129,25 @@ exports.calculateRoute = (0, firestore_1.onDocumentCreated)('emergencies/{emerge
     const nearestDrivers = matchingDrivers.slice(0, maxDrivers);
     // Notify drivers
     for (const driver of nearestDrivers) {
-        await admin.firestore()
-            .collection('notifications')
-            .add({
+        await db.collection('notifications').add({
             driverId: driver.id,
             emergencyId: emergencyId,
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             status: 'pending'
         });
     }
+    // Update emergency with nearest drivers
+    await snap.ref.update({
+        nearestDrivers: nearestDrivers.map(d => d.id),
+    });
     return null;
 });
 // Mobile Money Webhook
 app.post('/mobile-money', async (req, res) => {
     const { transactionId, amount, driverId, provider } = req.body;
     try {
-        const driverRef = admin.firestore()
-            .collection('drivers')
-            .doc(driverId);
-        await admin.firestore().runTransaction(async (transaction) => {
+        const driverRef = db.collection('drivers').doc(driverId);
+        await db.runTransaction(async (transaction) => {
             var _a;
             const driverDoc = await transaction.get(driverRef);
             const currentBalance = ((_a = driverDoc.data()) === null || _a === void 0 ? void 0 : _a.balance) || 0;
@@ -167,9 +156,7 @@ app.post('/mobile-money', async (req, res) => {
             });
         });
         // Record transaction
-        await admin.firestore()
-            .collection('payments')
-            .add({
+        await db.collection('payments').add({
             transactionId,
             amount,
             driverId,
@@ -184,5 +171,24 @@ app.post('/mobile-money', async (req, res) => {
         res.status(500).json({ error: 'Payment processing failed' });
     }
 });
+// Helper function to parse location from USSD input
+function parseLocation(ussdText) {
+    try {
+        // Example format: "1.123456,789012"
+        const coordinates = ussdText.split('.')[1].split(',');
+        if (coordinates.length === 2) {
+            return {
+                latitude: parseFloat(coordinates[0]),
+                longitude: parseFloat(coordinates[1]),
+                timestamp: Date.now(),
+            };
+        }
+        return null;
+    }
+    catch (error) {
+        console.error('Error parsing location:', error);
+        return null;
+    }
+}
 exports.api = functions.https.onRequest(app);
 //# sourceMappingURL=index.js.map
